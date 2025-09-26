@@ -1,49 +1,64 @@
 import { useEffect, useState } from "react";
+import { db } from "../firebase";
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  updateDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp,
+} from "firebase/firestore";
 
 const ROLES = ["admin", "operador"];
 
-const seed = [
-  { id: 1, nombre: "Bernardo",    correo: "bernardo@softek.com",    rol: "admin" },
-  { id: 2, nombre: "Alejandro",    correo: "alejandro@softek.com",  rol: "operador" },
-  { id: 3, nombre: "Adrían",    correo: "adrian@softek.com",    rol: "opeardor" },
-  { id: 4, nombre: "Felipe",    correo: "felipe@softek.com",  rol: "operador" },
-  { id: 5, nombre: "Armando",    correo: "armando@softek.com",    rol: "operador" },
-];
-
 export default function UsersCrud() {
-  const [users, setUsers] = useState(() => {
-    const saved = localStorage.getItem("users");
-    return saved ? JSON.parse(saved) : seed;
-  });
-
+  const [users, setUsers] = useState([]);
   const [form, setForm] = useState({ id: null, nombre: "", correo: "", rol: "operador" });
   const [editId, setEditId] = useState(null);
 
   useEffect(() => {
-    localStorage.setItem("users", JSON.stringify(users));
-  }, [users]);
+    const usersCol = collection(db, "users");
+    const unsub = onSnapshot(usersCol, (snap) => {
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+      list.sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+      setUsers(list);
+    });
+    return () => unsub();
+  }, []);
 
-   const createUser = () => {
+  const createUser = async () => {
     if (!form.nombre.trim() || !form.correo.trim()) return;
-    const newUser = { ...form, id: Date.now() };
-    setUsers((prev) => [...prev, newUser]);
+    await addDoc(collection(db, "users"), {
+      nombre: form.nombre.trim(),
+      correo: form.correo.trim(),
+      rol: form.rol,
+      createdAt: serverTimestamp(),
+    });
     resetForm();
   };
 
-  const updateUser = () => {
-    if (!form.nombre.trim() || !form.correo.trim()) return;
-    setUsers((prev) => prev.map((u) => (u.id === editId ? { ...form, id: editId } : u)));
+  const updateUser = async () => {
+    if (!form.nombre.trim() || !form.correo.trim() || !editId) return;
+    await updateDoc(doc(db, "users", editId), {
+      nombre: form.nombre.trim(),
+      correo: form.correo.trim(),
+      rol: form.rol,
+    });
     resetForm();
   };
 
-  const deleteUser = (id) => {
-    setUsers((prev) => prev.filter((u) => u.id !== id));
+  const deleteUser = async (id) => {
+    await deleteDoc(doc(db, "users", id));
     if (editId === id) resetForm();
   };
 
   const startEdit = (u) => {
     setEditId(u.id);
-    setForm({ id: u.id, nombre: u.nombre, correo: u.correo, rol: u.rol });
+    setForm({ id: u.id, nombre: u.nombre || "", correo: u.correo || "", rol: u.rol || "operador" });
   };
 
   const resetForm = () => {
@@ -53,8 +68,8 @@ export default function UsersCrud() {
 
   return (
     <div style={styles.page}>
-      <div>
-        <h2 style={{ marginTop: 0 }}>Usuarios Reto</h2>
+      <div style={styles.card}>
+        <h2 style={{ marginTop: 0 }}>Usuarios (Firestore)</h2>
 
         <div style={styles.form}>
           <input
@@ -89,7 +104,6 @@ export default function UsersCrud() {
           )}
         </div>
 
-        
         <table style={styles.table}>
           <thead>
             <tr>
@@ -126,10 +140,6 @@ export default function UsersCrud() {
 
 const styles = {
   page: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "black",
+    background: "white",
   },
 };
-
